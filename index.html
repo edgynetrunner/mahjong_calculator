@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>麻将算钱</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--tx:#1d1d1b;--mu:#76736b;--ac:#0f7b5f;--bd:#e3dfd5;--pos:#0f7b5f;--neg:#c2392b;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161814;--card:#22251f;--tx:#f0eee8;--mu:#a29f95;--ac:#3fbf9a;--bd:#34382f;--pos:#4fd1a5;--neg:#ff8a7a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#161814;--card:#22251f;--tx:#f0eee8;--mu:#a29f95;--ac:#3fbf9a;--bd:#34382f;--pos:#4fd1a5;--neg:#ff8a7a;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;padding:12px;max-width:520px;margin:0 auto}
+h1{font-size:20px;margin:4px 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-bottom:12px}
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1;padding:10px 4px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;font-size:14px}
+.tabs button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
+input,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font-size:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.names{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:8px 12px;border:1px solid var(--bd);border-radius:20px;background:var(--bg);color:var(--tx);font-size:14px}
+.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.st{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd)}
+.st:last-child{border:0}
+.st .c{display:flex;align-items:center;gap:12px}
+.st button{width:36px;height:36px;border-radius:50%;border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-size:20px}
+.st b{min-width:20px;text-align:center}
+.go{width:100%;padding:13px;border:0;border-radius:12px;background:var(--ac);color:#fff;font-size:17px;margin-top:12px}
+.sm{padding:8px 12px;border:1px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;font-size:14px}
+.tot{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd);font-size:18px}
+.tot:last-child{border:0}
+.p{color:var(--pos)}.n{color:var(--neg)}
+.h{padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
+.h small{color:var(--mu)}
+</style>
+</head>
+<body>
+<h1>🀄 麻将算钱</h1>
+<div id="sync" style="font-size:13px;color:var(--mu);margin:-6px 0 10px"></div>
+<div class="card"><div class="tabs" id="tabs"></div><div class="names" id="names" style="margin-top:10px"></div><div id="rate"></div></div>
+<div class="card" id="form"></div>
+<div class="card"><div style="font-weight:600;margin-bottom:4px">总结算</div><div id="totals"></div>
+<div class="row" style="margin-top:10px"><button class="sm" onclick="undo()">撤销上一局</button><button class="sm" onclick="resetAll()">清空</button></div></div>
+<div class="card"><div style="font-weight:600;margin-bottom:4px">记录</div><div id="hist"></div></div>
+<script>
+const $=id=>document.getElementById(id);
+let S={mode:'4a',names:[],rate:1,rounds:[]},F;
+const N=()=>S.mode==='3'?3:4, B=()=>S.mode==='4b'?2:1;
+const fm=v=>(v>0?'+':v<0?'-':'')+'RM'+Math.abs(v).toFixed(2).replace(/\.00$/,'');
+const cl=v=>v>0?'p':v<0?'n':'';
+function resetF(){F={w:-1,t:'z',s:0,fan:1,fei:0,an:Array(N()).fill(0),gg:Array(N()).fill(0)}}
+let DB=null,tm;
+function fixNames(){S.names=Array.from({length:N()},(_,i)=>S.names[i]||'玩家'+(i+1))}
+function saveCfg(){if(!DB)return;clearTimeout(tm);tm=setTimeout(()=>DB.doc('game/cfg').set({mode:S.mode,names:S.names,rate:S.rate}).catch(werr),300)}
+function werr(){$('sync').textContent='⚠️ 没有编辑权限，只能查看。请让主人把你设为「Contributor」'}
+async function clearRounds(){if(!DB)return;const q=await DB.collection('rounds').get();q.docs.forEach(d=>DB.doc('rounds/'+d.id).delete().catch(werr))}
+function setMode(m){S.mode=m;fixNames();S.rounds=[];resetF();renderAll();if(DB){saveCfg();clearRounds()}}
+function calc(r){const n=N(),net=Array(n).fill(0),b=B();
+ if(S.mode!=='3')for(let i=0;i<n;i++)for(let j=0;j<n;j++)if(i!==j){const a=r.an[i]*b+r.gg[i]*2*b;net[i]+=a;net[j]-=a}
+ if(r.w>=0){const base=S.mode==='3'?r.fan*r.rate:b;
+  for(let j=0;j<n;j++)if(j!==r.w){let a=base+(S.mode==='3'?0:r.fei);if(r.t==='p'&&j===r.s)a+=base;net[r.w]+=a;net[j]-=a}}
+ return net}
+function upd(k,v){F[k]=v;if(k==='w'&&F.s===v)F.s=(v+1)%N();renderForm()}
+function step(k,i,d){if(i==null)F[k]=Math.max(0,F[k]+d);else F[k][i]=Math.max(0,F[k][i]+d);renderForm()}
+function stepper(t,k,i,v){return `<div class="st"><span>${t}</span><span class="c"><button onclick="step('${k}',${i},-1)">−</button><b>${v}</b><button onclick="step('${k}',${i},1)">+</button></span></div>`}
+function renderForm(){const n=N(),is3=S.mode==='3';
+ let h='<div style="font-weight:600">本局</div><label>谁胡？</label><div class="chips">'+
+ S.names.map((x,i)=>`<button class="chip ${F.w===i?'on':''}" onclick="upd('w',${i})">${esc(x)}</button>`).join('')+
+ `<button class="chip ${F.w===-1?'on':''}" onclick="upd('w',-1)">没人胡</button></div>`;
+ if(F.w>=0){
+  h+=`<label>胡法</label><div class="chips"><button class="chip ${F.t==='z'?'on':''}" onclick="upd('t','z')">自摸</button><button class="chip ${F.t==='p'?'on':''}" onclick="upd('t','p')">点炮</button></div>`;
+  if(F.t==='p'){h+='<label>谁点炮？</label><div class="chips">'+S.names.map((x,i)=>i===F.w?'':`<button class="chip ${F.s===i?'on':''}" onclick="upd('s',${i})">${esc(x)}</button>`).join('')+'</div>'}
+  h+=is3?stepper('番数','fan',null,F.fan):stepper('飞 (每个+RM1)','fei',null,F.fei);
+ }
+ if(!is3){h+='<label>杠 (所有人都要付)</label>'+S.names.map((x,i)=>`<div style="font-size:13px;margin-top:6px">${esc(x)}</div>`+stepper('暗杠','an',i,F.an[i])+stepper('杠','gg',i,F.gg[i])).join('')}
+ h+='<button class="go" onclick="add()">记录这一局</button>';
+ $('form').innerHTML=h}
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function add(){const r={...F,an:[...F.an],gg:[...F.gg],rate:S.rate};r.net=calc(r);r.ts=Date.now();resetF();renderForm();if(DB){DB.collection('rounds').add(r).catch(werr)}else{S.rounds.push(r);renderRes()}}
+function undo(){if(DB){const l=S.rounds[S.rounds.length-1];if(l)DB.doc('rounds/'+l.id).delete().catch(werr)}else{S.rounds.pop();renderRes()}}
+function resetAll(){if(confirm('清空所有记录？')){if(DB)clearRounds();else{S.rounds=[];renderRes()}}}
+function renderRes(){const n=N(),t=Array(n).fill(0);S.rounds.forEach(r=>r.net.forEach((v,i)=>t[i]+=v));
+ $('totals').innerHTML=S.names.map((x,i)=>`<div class="tot"><span>${esc(x)}</span><b class="${cl(t[i])}">${fm(t[i])}</b></div>`).join('');
+ $('hist').innerHTML=S.rounds.length?S.rounds.map((r,k)=>{
+  const d=r.w<0?'没人胡':`${esc(S.names[r.w])} ${r.t==='z'?'自摸':'点炮 ('+esc(S.names[r.s])+')'}`+(S.mode==='3'?` ${r.fan}番`:(r.fei?` 飞${r.fei}`:''));
+  return `<div class="h"><b>第${k+1}局</b> ${d}<br><small>${r.net.map((v,i)=>esc(S.names[i])+' '+fm(v)).join(' · ')}</small></div>`}).reverse().join(''):'<small style="color:var(--mu)">还没有记录</small>'}
+function renderAll(){
+ const tabs=[['3','三人'],['4a','四人 RM1'],['4b','四人 RM2']];
+ $('tabs').innerHTML=tabs.map(([m,l])=>`<button class="${S.mode===m?'on':''}" onclick="${S.mode===m?'':`if(!S.rounds.length||confirm('切换模式会清空记录'))`}setMode('${m}')">${l}</button>`).join('');
+ $('names').innerHTML=S.names.map((x,i)=>`<input value="${esc(x)}" oninput="S.names[i=${i}]=this.value;renderForm();renderRes();saveCfg()">`).join('');
+ $('rate').innerHTML=S.mode==='3'?`<label>每番多少钱 (RM)</label><input type="number" inputmode="decimal" step="0.1" min="0" value="${S.rate}" oninput="S.rate=parseFloat(this.value)||0;saveCfg()">`:'';
+ renderForm();renderRes()}
+fixNames();resetF();renderAll();
+const FB='https://the-mahjong-calculator-default-rtdb.asia-southeast1.firebasedatabase.app/';
+if(FB.startsWith('http')){
+ if(!location.hash)location.hash=Math.random().toString(36).slice(2,6).toUpperCase();
+ const room=()=>location.hash.slice(1);
+ const req=(m,p,d)=>fetch(`${FB.replace(/\/$/,'')}/rooms/${room()}/${p}.json`,{method:m,body:d?JSON.stringify(d):undefined}).then(r=>{if(!r.ok)throw 0;return r.json()});
+ DB={doc:p=>({set:d=>req('PUT',p,d),delete:()=>req('DELETE',p)}),collection:p=>({add:d=>req('POST',p,d),get:async()=>{const o=await req('GET',p)||{};return{docs:Object.keys(o).map(id=>({id}))}}})};
+ window.werr=()=>{$('sync').textContent='⚠️ 连接失败，请检查 Firebase 设置'};
+ let last='';
+ const poll=async()=>{try{const o=await req('GET','')||{};const j=JSON.stringify(o);
+  $('sync').textContent='🟢 房间 '+room()+'：把这个网址发给朋友，大家实时同步';
+  if(j!==last){last=j;const c=o.game&&o.game.cfg;
+   if(c){const oldN=N();S.mode=c.mode;S.rate=c.rate;S.names=c.names;if(N()!==oldN)resetF()}
+   S.rounds=Object.entries(o.rounds||{}).map(([id,v])=>({...v,id})).sort((x,y)=>x.ts-y.ts);
+   const a=document.activeElement;if(a&&a.tagName==='INPUT'){renderForm();renderRes()}else renderAll()}
+ }catch(e){werr()}};
+ poll();setInterval(poll,2000);
+ addEventListener('hashchange',()=>{last='';S.rounds=[];poll()});
+}else{$('sync').textContent='单机模式（未连接同步）'}
+</script>
+</body>
+</html>
