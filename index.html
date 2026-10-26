@@ -61,7 +61,7 @@ async function clearRounds(){if(!DB)return;const q=await DB.collection('rounds')
 function setMode(m){S.mode=m;fixNames();S.rounds=[];resetF();renderAll();if(DB){saveCfg();clearRounds()}}
 function calc(r){const n=N(),net=Array(n).fill(0),b=B();
  if(S.mode!=='3')for(let i=0;i<n;i++)for(let j=0;j<n;j++)if(i!==j){const a=r.an[i]*b+r.gg[i]*2*b;net[i]+=a;net[j]-=a}
- if(r.w>=0){const base=S.mode==='3'?r.fan*r.rate:b;
+ if(r.w>=0){const base=S.mode==='3'?r.fan*r.rate:(S.mode==='4b'&&r.t==='z'?4:b);
   for(let j=0;j<n;j++)if(j!==r.w){let a=base+(S.mode==='3'?0:r.fei);if(r.t==='p'&&j===r.s)a+=base;net[r.w]+=a;net[j]-=a}}
  return net}
 function upd(k,v){F[k]=v;if(k==='w'&&F.s===v)F.s=(v+1)%N();renderForm()}
@@ -83,8 +83,8 @@ function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 function add(){const r={...F,an:[...F.an],gg:[...F.gg],rate:S.rate};r.net=calc(r);r.ts=Date.now();resetF();renderForm();if(DB){DB.collection('rounds').add(r).catch(werr)}else{S.rounds.push(r);renderRes()}}
 function undo(){if(DB){const l=S.rounds[S.rounds.length-1];if(l)DB.doc('rounds/'+l.id).delete().catch(werr)}else{S.rounds.pop();renderRes()}}
 function resetAll(){if(confirm('清空所有记录？')){if(DB)clearRounds();else{S.rounds=[];renderRes()}}}
-function renderRes(){const n=N(),t=Array(n).fill(0);S.rounds.forEach(r=>r.net.forEach((v,i)=>t[i]+=v));
- $('totals').innerHTML=S.names.map((x,i)=>`<div class="tot"><span>${esc(x)}</span><b class="${cl(t[i])}">${fm(t[i])}</b></div>`).join('');
+function renderRes(){const n=N(),t=Array(n).fill(0);S.rounds.forEach(r=>r.net.forEach((v,i)=>t[i]+=v));const ka=Array(n).fill(0),kg=Array(n).fill(0);S.rounds.forEach(r=>{(r.an||[]).forEach((v,i)=>{ka[i]+=v});(r.gg||[]).forEach((v,i)=>{kg[i]+=v})});
+ $('totals').innerHTML=S.names.map((x,i)=>`<div class="tot"><span>${esc(x)}${S.mode==='3'?'':`<br><small style="color:var(--mu);font-size:13px">暗杠 ${ka[i]} · 杠 ${kg[i]}</small>`}</span><b class="${cl(t[i])}">${fm(t[i])}</b></div>`).join('');
  $('hist').innerHTML=S.rounds.length?S.rounds.map((r,k)=>{
   const d=r.w<0?'没人胡':`${esc(S.names[r.w])} ${r.t==='z'?'自摸':'点炮 ('+esc(S.names[r.s])+')'}`+(S.mode==='3'?` ${r.fan}番`:(r.fei?` 飞${r.fei}`:''));
   return `<div class="h"><b>第${k+1}局</b> ${d}<br><small>${r.net.map((v,i)=>esc(S.names[i])+' '+fm(v)).join(' · ')}</small></div>`}).reverse().join(''):'<small style="color:var(--mu)">还没有记录</small>'}
@@ -95,7 +95,7 @@ function renderAll(){
  $('rate').innerHTML=S.mode==='3'?`<label>每番多少钱 (RM)</label><input type="number" inputmode="decimal" step="0.1" min="0" value="${S.rate}" oninput="S.rate=parseFloat(this.value)||0;saveCfg()">`:'';
  renderForm();renderRes()}
 fixNames();resetF();renderAll();
-const FB='https://the-mahjong-calculator-default-rtdb.asia-southeast1.firebasedatabase.app/';
+const FB='https://the-mahjong-calculator-default-rtdb.asia-southeast1.firebasedatabase.app';
 if(FB.startsWith('http')){
  if(!location.hash)location.hash=Math.random().toString(36).slice(2,6).toUpperCase();
  const room=()=>location.hash.slice(1);
