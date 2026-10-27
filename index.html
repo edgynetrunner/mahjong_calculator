@@ -16,7 +16,7 @@ h1{font-size:20px;margin:4px 0 12px}
 .tabs button{flex:1;padding:10px 4px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;font-size:14px}
 .tabs button.on,.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
 label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
-input{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font-size:16px}
+input,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font-size:16px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .chip{padding:8px 12px;border:1px solid var(--bd);border-radius:20px;background:var(--bg);color:var(--tx);font-size:14px}
 .x{border:0;background:none;color:var(--mu);font-size:18px;padding:0 4px}
@@ -40,12 +40,15 @@ small{color:var(--mu)}
 <body>
 <h1>🀄 麻将算钱</h1>
 <div id="sync" style="font-size:13px;color:var(--mu);margin:-6px 0 10px"></div>
-<div id="land"><h1>你叫什么名字？</h1><input id="nm0" placeholder="输入你的名字" maxlength="12"><button class="go" onclick="join($('nm0').value)">进入</button></div>
+<div id="land"><h1>你叫什么名字？</h1><input id="nm0" placeholder="输入你的名字" maxlength="12"><button class="go" onclick="join($('nm0').value)">加入牌局</button><button class="sm" style="margin-top:10px" onclick="location.hash=''">← 返回大厅</button></div>
+<div id="lobby" style="display:none"><div class="card"><div style="font-weight:600">创建新牌局</div><label>牌局名称 (可不填)</label><input id="sn" maxlength="16" placeholder="例如：周五牌局"><label>模式</label><select id="sm"><option value="4a">四人 RM1</option><option value="4b">四人 RM2</option><option value="3">三人</option></select><button class="go" onclick="newS()">创建并加入</button></div><div class="card"><div style="font-weight:600;margin-bottom:4px">进行中的牌局 (每个最多4人)</div><div id="ls"><small>加载中…</small></div></div></div>
+<div id="app">
 <div class="card"><div class="tabs" id="tabs"></div><div id="rate"></div><label>玩家 (点自己的名字可改名)</label><div class="chips" id="pl"></div></div>
 <div class="card" id="form"></div>
 <div class="card"><div style="font-weight:600;margin-bottom:4px">总结算</div><div id="totals"></div></div>
 <div class="card"><div style="font-weight:600;margin-bottom:4px">记录</div><div id="kong"></div><div id="hist"></div>
 <button class="sm" style="margin-top:10px" onclick="clearAll()">清空所有记录</button></div>
+<div class="chips" style="margin-bottom:12px"><button class="sm" onclick="location.hash=''">← 返回大厅</button><button class="sm" style="color:var(--neg)" onclick="BK.end()">结束牌局</button></div></div>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -53,7 +56,7 @@ const uid=()=>Math.random().toString(36).slice(2,10);
 const fm=v=>(v>0?'+':v<0?'-':'')+'RM'+Math.abs(v).toFixed(2).replace(/\.00$/,'');
 const cl=v=>v>0?'p':v<0?'n':'';
 const tm=t=>new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-let D={cfg:{mode:'4a',rate:1},players:{},records:{}},BK,me=null,F,open={},sig='',tmr,once=false;
+let D={cfg:{mode:'4a',rate:1},players:{},records:{}},BK,me=null,F,open={},sig='',tmr,loaded=false;
 try{me=JSON.parse(localStorage.getItem('mj_me'))}catch(e){}
 const M=()=>D.cfg.mode||'4a',is3=()=>M()==='3',NP=()=>is3()?3:4;
 const PL=()=>Object.entries(D.players).map(([id,v])=>({id,...v})).sort((a,b)=>a.ts-b.ts);
@@ -67,12 +70,12 @@ function netOf(r){const ids=PL().map(p=>p.id),n={};ids.forEach(i=>n[i]=0);if(!(r
  return n}
 function W(p,d){if(p==='game/cfg')D.cfg=d;else{const[c,id]=p.split('/');if(d===null)delete D[c][id];else D[c][id]=d}renderAll();BK.write(p,d)}
 function join(name){name=(name||'').trim();if(!name)return;
- if(!me)me={id:uid()};if(!D.players[me.id]&&PL().length>=NP()){alert('房间已满');return}
+ if(!me)me={id:uid()};if(!D.players[me.id]&&PL().length>=NP()){alert('这个牌局已满（最多4人）');location.hash='';return}
  me.name=name;try{localStorage.setItem('mj_me',JSON.stringify(me))}catch(e){}
  W('players/'+me.id,{name,ts:(D.players[me.id]||{}).ts||Date.now()})}
 function onData(o){const rs=o.records||{};Object.values(rs).forEach(r=>{r.hist=Array.isArray(r.hist)?r.hist:r.hist?Object.values(r.hist):[]});
  D={cfg:(o.game&&o.game.cfg)||{mode:'4a',rate:1},players:o.players||{},records:rs};
- if(!once){once=true;if(me&&me.name&&!D.players[me.id]&&PL().length<NP())join(me.name)}renderAll()}
+ loaded=true;renderAll()}
 function chMode(m){if(m===M())return;if(RL().length&&!confirm('切换模式会清空记录'))return;
  Object.keys(D.records).forEach(id=>W('records/'+id,null));W('game/cfg',{mode:m,rate:D.cfg.rate||1})}
 function setRate(v){D.cfg.rate=parseFloat(v)||0;clearTimeout(tmr);tmr=setTimeout(()=>W('game/cfg',D.cfg),400)}
@@ -115,24 +118,41 @@ function renderTop(){if(document.activeElement&&document.activeElement.tagName==
  $('pl').innerHTML=PL().map(p=>p.id===(me&&me.id)?`<button class="chip on" onclick="rn()">${esc(p.name)}</button>`:`<span class="chip">${esc(p.name)}<button class="x" onclick="rmP('${p.id}')">×</button></span>`).join('')||'<small>还没有人加入</small>'}
 function renderRes(){const ps=PL(),rs=RL(),t={},ka={},kg={};ps.forEach(p=>{t[p.id]=0;ka[p.id]=0;kg[p.id]=0});
  const ns=rs.map(r=>{const n=netOf(r);for(const i in n)t[i]+=n[i];if(r.p in ka){ka[r.p]+=r.an||0;kg[r.p]+=r.gg||0}return n});
- $('totals').innerHTML=ps.map(p=>`<div class="tot"><span>${esc(p.name)}</span><b class="${cl(t[p.id])}">${fm(t[p.id])}</b></div>`).join('');
+ $('totals').innerHTML=ps.map(p=>`<div class="tot"><span>${esc(p.name)}</span><b class="${cl(t[p.id])}">${fm(t[p.id])}</b></div>`).join('')+sethtml(t,ps);
  $('kong').innerHTML=is3()?'':'<div style="font-size:14px;padding-bottom:8px;border-bottom:1px solid var(--bd)"><b>杠统计</b>'+ps.map(p=>`<div>${esc(p.name)}：暗杠 ${ka[p.id]} · 杠 ${kg[p.id]}</div>`).join('')+'</div>';
  $('hist').innerHTML=rs.length?rs.map((r,k)=>{const n=ns[k],ln=ps.filter(p=>n[p.id]).map(p=>esc(p.name)+' '+fm(n[p.id])).join(' · ');
   const hs=r.hist&&r.hist.length;
   return `<div class="h"><b>${esc(nm(r.p))}</b> <small>${tm(r.ts)}</small>${hs?`<button class="bd" onclick="tg('${r.id}')">已编辑 ${open[r.id]?'▴':'▾'}</button>`:''}<button class="sm" style="float:right;padding:3px 10px" onclick="edit('${r.id}')">编辑</button><br>${dsc(r)}<br><small>${ln||'无变动'}</small>`+
   (hs&&open[r.id]?r.hist.slice().reverse().map(h=>`<div class="hh">${tm(h.ts)} ${esc(h.by)} 修改<br>改前：${dsc(h.was)}</div>`).join(''):'')+'</div>'}).reverse().join(''):'<small>还没有记录</small>'}
-function renderAll(){$('land').style.display=(me&&me.name)?'none':'block';renderTop();renderRes();
+function renderAll(){const need=loaded&&!(me&&D.players[me.id]);$('land').style.display=need?'block':'none';if(need&&!$('nm0').value&&me&&me.name)$('nm0').value=me.name;renderTop();renderRes();
  const s=M()+PL().map(p=>p.id).join()+(me&&me.id)+F.edit;if(s!==sig){sig=s;renderForm()}}
+function sethtml(t,ps){const c=ps.filter(p=>t[p.id]>.004).map(p=>({id:p.id,v:t[p.id]})).sort((a,b)=>b.v-a.v),d=ps.filter(p=>t[p.id]<-.004).map(p=>({id:p.id,v:-t[p.id]})).sort((a,b)=>b.v-a.v),o=[];let i=0,j=0;
+ while(i<d.length&&j<c.length){const a=Math.min(d[i].v,c[j].v);o.push(`<div style="padding:3px 0"><b>${esc(nm(d[i].id))}</b> → <b>${esc(nm(c[j].id))}</b>：RM${a.toFixed(2).replace(/\.00$/,'')}</div>`);d[i].v-=a;c[j].v-=a;if(d[i].v<.005)i++;if(c[j].v<.005)j++}
+ return '<div style="margin-top:10px;padding-top:10px;border-top:2px solid var(--bd);font-size:15px"><b>谁付给谁</b>'+(o.join('')||'<div><small>目前没有需要结算的</small></div>')+'</div>'}
+function renderLobby(l){$('ls').innerHTML=l.length?l.map(s=>{const cap=s.mode==='3'?3:4,full=s.n>=cap;return `<div class="h"><b>${esc(s.name)}</b> <small>${s.mode==='3'?'三人':s.mode==='4b'?'四人 RM2':'四人 RM1'} · ${s.n}/${cap}人</small><button class="sm" style="float:right;padding:3px 12px" ${full?'disabled':''} onclick="location.hash='${s.code}'">${full?'已满':'加入'}</button></div>`}).join(''):'<small>暂时没有进行中的牌局，创建一个吧</small>'}
+function newS(){BK.create($('sn').value.trim(),$('sm').value)}
 function startBackend(cb){
  const FB='https://the-mahjong-calculator-default-rtdb.asia-southeast1.firebasedatabase.app';
- if(!FB.startsWith('http')){$('sync').textContent='单机模式（未连接同步）';return{write(){}}}
- if(!location.hash)location.hash=Math.random().toString(36).slice(2,6).toUpperCase();
- const room=()=>location.hash.slice(1);
- const req=(m,p,d)=>fetch(`${FB}/rooms/${room()}${p?'/'+p:''}.json`,{method:m,body:d==null?undefined:JSON.stringify(d)}).then(r=>{if(!r.ok)throw 0;return r.json()});
+ const room=()=>location.hash.slice(1),inLobby=()=>location.hash.length<2;
+ const rq=(m,p,d,q)=>fetch(`${FB}/${p}.json${q||''}`,{method:m,body:d==null?undefined:JSON.stringify(d)}).then(r=>{if(!r.ok)throw 0;return r.json()});
+ const view=()=>{const l=inLobby();$('lobby').style.display=l?'block':'none';$('app').style.display=l?'none':'block'};
  let last='';
- const poll=async()=>{try{const o=await req('GET','')||{};$('sync').textContent='🟢 房间 '+room()+'：把这个网址发给朋友，大家实时同步';const j=JSON.stringify(o);if(j!==last){last=j;onData(o)}}catch(e){$('sync').textContent='⚠️ 连接失败，请检查 Firebase 设置'}};
- poll();setInterval(poll,2000);addEventListener('hashchange',()=>{last='';once=false;poll()});
- return{write:(p,d)=>req(d===null?'DELETE':'PUT',p,d).then(poll).catch(()=>{$('sync').textContent='⚠️ 保存失败'})}}
+ const poll=async()=>{try{
+  if(inLobby()){const idx=await rq('GET','sessions')||{},now=Date.now();
+   const l=Object.entries(idx).filter(([c,v])=>v.name&&now-v.ts<12*36e5).sort((a,b)=>b[1].ts-a[1].ts);
+   const ns=await Promise.all(l.map(([c])=>rq('GET','rooms/'+c+'/players',null,'?shallow=true').then(o=>Object.keys(o||{}).length).catch(()=>0)));
+   renderLobby(l.map(([c,v],i)=>({code:c,...v,n:ns[i]})));$('sync').textContent='🟢 已连接';return}
+  const o=await rq('GET','rooms/'+room())||{};$('sync').textContent='🟢 牌局 '+room()+'：大家实时同步';
+  const j=JSON.stringify(o);if(j!==last){last=j;cb(o)}
+ }catch(e){$('sync').textContent='⚠️ 连接失败，请检查 Firebase 设置'}};
+ view();poll();setInterval(poll,2500);
+ addEventListener('hashchange',()=>{view();last='';D={cfg:{mode:'4a',rate:1},players:{},records:{}};loaded=false;sig='';open={};resetF();renderAll();poll()});
+ return{
+  write:(p,d)=>rq(d===null?'DELETE':'PUT','rooms/'+room()+'/'+p,d).then(()=>rq('PATCH','sessions/'+room(),{ts:Date.now(),mode:D.cfg.mode||'4a'})).then(poll).catch(()=>{$('sync').textContent='⚠️ 保存失败'}),
+  create:async(name,mode)=>{const c=Math.random().toString(36).slice(2,6).toUpperCase();
+   try{await rq('PUT','sessions/'+c,{name:name||'牌局 '+c,mode,ts:Date.now()});await rq('PUT','rooms/'+c+'/game/cfg',{mode,rate:1});location.hash=c}catch(e){alert('创建失败')}},
+  end:async()=>{if(!confirm('结束并删除这个牌局？所有记录都会清除'))return;
+   try{await rq('DELETE','sessions/'+room());await rq('DELETE','rooms/'+room())}catch(e){}location.hash=''}}}
 
 resetF();BK=startBackend(onData);renderAll();
 </script>
